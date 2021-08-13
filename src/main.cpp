@@ -19,11 +19,17 @@
 #include "SGP4.h"
 #include "meb_debug.h"
 #include "track.hpp"
+#include "network.hpp"
 
 int main(int argc, char *argv[])
 {
-    char devname[32] = "/dev/ttyUSB0";
-    
+    global_data_t global_data[1] = {0};
+    network_data_init(global_data->network_data, SERVER_PORT);
+    global_data->network_data->rx_active = true;
+    global_data->network_data->thread_status = 1;
+
+    strcpy(global_data->devname, "/dev/ttyUSB0");
+
     if (argc > 2)
     {
         dbprintlf(FATAL "Invalid number of command-line arguments given.");
@@ -31,58 +37,38 @@ int main(int argc, char *argv[])
     }
     else if (argc == 2)
     {
-        strcpy(devname, argv[1]);
+        strcpy(global_data->devname, argv[1]);
     }
 
-    // Open a connection to the dish controller.
-    int connection = open_connection(devname);
-    if (connection < 3)
+    pthread_t net_polling_tid, net_rx_tid, tracking_tid;
+
+    while (global_data->network_data->thread_status > -1)
     {
-        dbprintlf(FATAL "Device not found.");
-        return -1;
+        pthread_create(&net_polling_tid, NULL, gs_polling_thread, &global_data->network_data);
+        pthread_create(&net_rx_tid, NULL, gs_network_rx_thread, global_data);
+        pthread_create(&tracking_tid, NULL, tracking_thread, global_data);
+
+        void *thread_return;
+        pthread_join(net_polling_tid, &thread_return);
+        pthread_join(net_rx_tid, &thread_return);
+        pthread_join(tracking_tid, &thread_return);
     }
 
-    SGP4 *target = new SGP4(Tle(TLE[0], TLE[1]));
-    Observer *dish = new Observer(GS_LAT, GS_LON, ELEV);
-    CoordTopocentric ideal;
+    // Finished.
+    void *thread_return;
+    pthread_cancel(net_polling_tid);
+    pthread_cancel(net_rx_tid);
+    pthread_cancel(tracking_tid);
+    thread_return == PTHREAD_CANCELED ? printf("Good net_polling_tid join.\n") : printf("Bad net_polling_tid join.\n");
+    pthread_join(net_rx_tid, &thread_return);
+    thread_return == PTHREAD_CANCELED ? printf("Good net_rx_tid join.\n") : printf("Bad net_rx_tid join.\n");
+    pthread_join(tracking_tid, &thread_return);
+    thread_return == PTHREAD_CANCELED ? printf("Good tracking_tid join.\n") : printf("Bad tracking_tid join.\n");
 
-    double current_azimuth = 0;
-    double current_elevation = 0;
+    close(global_data->network_data->socket);
 
-    for (;;)
-    {
-        // Establish if the target is visible.
-        if (dish->GetLookAngle(target->FindPosition(DateTime::Now(true))).elevation > 0.f)
-        { // The target is visible.
-            // Find the angle to the target.
-            ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
-        }
-        else
-        { // The target is not visible.
-            // Find the angle to the next targetrise.
-            ideal = find_next_targetrise(target, dish);
-        }
+    return global_data->network_data->thread_status;
 
-        // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
-
-        // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
-        if (ideal.azimuth DEG - current_azimuth < -1 || ideal.azimuth DEG - current_azimuth > 1)
-        {
-            aim_azimuth(connection, ideal.azimuth DEG);
-            current_azimuth = ideal.azimuth DEG;
-        }
-
-        if (ideal.elevation DEG - current_elevation < -1 || ideal.elevation DEG - current_elevation > 1)
-        {
-            aim_elevation(connection, ideal.elevation DEG);
-            current_elevation = ideal.elevation DEG;
-        }
-
-        usleep(1 SEC);
-    }
-
-    delete dish;
-    delete target;
-    close(connection);
+    
     return 1;
 }

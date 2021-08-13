@@ -13,11 +13,25 @@
 #define TRACK_HPP
 
 #include "CoordTopocentric.h"
+#include "network.hpp"
+
+#define SERVER_PORT 54240
+
 #define SEC *1000000 // nanoseconds to seconds
 #define DEG *(180/3.1415926) // radians to degrees
 #define GS_LAT 42.655583
 #define GS_LON -71.325433
 #define ELEV 0.061 // Lowell ASL + Olney Height; Kilometers for some reason.
+
+typedef struct
+{
+    // uhf_modem_t modem; // Just an int.
+    int uhf_initd;
+    network_data_t network_data[1];
+    uint8_t netstat;
+    char devname[32];
+    double AzEl[2]; // Azimuth, Elevation
+} global_data_t;
 
 /**
  * @brief Two line element of the ISS.
@@ -64,5 +78,21 @@ int aim_elevation(int connection, double elevation);
  * @return CoordTopocentric 
  */
 CoordTopocentric find_next_targetrise(SGP4 *model, Observer *dish);
+
+/**
+ * @brief 
+ * 
+ * @param args 
+ * @return void* 
+ */
+void *tracking_thread(void *args);
+
+/**
+ * @brief 
+ * 
+ * @param args 
+ * @return void* 
+ */
+void *gs_network_rx_thread(void *args);
 
 #endif // TRACK_HPP
