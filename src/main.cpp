@@ -44,6 +44,8 @@ int main(int argc, char *argv[])
 
     while (global_data->network_data->thread_status > -1)
     {
+        global_data->network_data->thread_status = 1;
+
         pthread_create(&net_polling_tid, NULL, gs_polling_thread, &global_data->network_data);
         pthread_create(&net_rx_tid, NULL, gs_network_rx_thread, global_data);
         pthread_create(&tracking_tid, NULL, tracking_thread, global_data);
@@ -52,6 +54,8 @@ int main(int argc, char *argv[])
         pthread_join(net_polling_tid, &thread_return);
         pthread_join(net_rx_tid, &thread_return);
         pthread_join(tracking_tid, &thread_return);
+
+        usleep(1 SEC);
     }
 
     // Finished.

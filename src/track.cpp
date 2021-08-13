@@ -171,7 +171,7 @@ void *gs_network_rx_thread(void *args)
     // Similar, if not identical, to the network functionality in ground_station.
     // Roof UHF is a network client to the GS Server, and so should be very similar in socketry to ground_station.
 
-    while (network_data->rx_active)
+    while (network_data->rx_active && global_data->network_data->thread_status > 0)
     {
         if (!network_data->connection_ready)
         {
