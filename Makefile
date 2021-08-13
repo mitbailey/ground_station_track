@@ -1,5 +1,5 @@
 CXX = g++
-CPPOBJS = src/main.o src/track.o driver/SGP4/Dish.o driver/SGP4/Satellite.o driver/SGP4/CoordGeodetic.o driver/SGP4/CoordTopocentric.o driver/SGP4/Observer.o driver/SGP4/SGP4.o
+CPPOBJS = src/main.o src/track.o driver/SGP4/libsgp4/SGP4.o SGP4/libsgp4/Observer.o driver/SGP4/libsgp4/CoordGeodetic.o driver/SGP4/libsgp4/CoordTopocentric.o driver/ driver/SGP4/libsgp4/DateTime.o
 COBJS = 
 CXXFLAGS = -I ./ -I ./include/ -I ./drivers/SGP4/libsgp4/ -Wall -pthread
 EDLDFLAGS :=
