@@ -24,7 +24,7 @@ int open_connection(char *devname)
 {
     if (devname == nullptr)
     {
-        dbprintlf(RED_FG "Device name null!");
+        dbprintlf(RED_FG "Device name null.");
         return -1;
     }
 
@@ -50,12 +50,12 @@ int open_connection(char *devname)
 int aim_azimuth(int connection, double azimuth)
 {
     // Command the dish manuever azimuth.
+    const int command_size = 0x10;
+    char command[command_size];
+    snprintf(command, command_size, "PB %d\r", (int)(azimuth DEG));
 
-    char command[7];
-    snprintf(command, sizeof(command), "PB %d\r", (int)(azimuth DEG));
-
-    ssize_t az_bytes = write(connection, command, sizeof(command));
-    if (az_bytes != sizeof(command))
+    ssize_t az_bytes = write(connection, command, command_size);
+    if (az_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
         return -1;
@@ -67,12 +67,12 @@ int aim_azimuth(int connection, double azimuth)
 int aim_elevation(int connection, double elevation)
 {
     // Command the dish manuever elevation.
+    const int command_size = 0x10;
+    char command[command_size];
+    snprintf(command, command_size, "PB %d\r", (int)(elevation DEG));
 
-    char command[7];
-    snprintf(command, sizeof(command), "PB %d\r", (int)(elevation DEG));
-
-    ssize_t el_bytes = write(connection, command, sizeof(command));
-    if (el_bytes != sizeof(command))
+    ssize_t el_bytes = write(connection, command, command_size);
+    if (el_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
         return -1;
