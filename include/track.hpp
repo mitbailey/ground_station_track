@@ -13,9 +13,8 @@
 #define TRACK_HPP
 
 #include "CoordTopocentric.h"
-
 #define SEC *1000000 // nanoseconds to seconds
-#define DEG *57.29578 // radians to degrees
+#define DEG *(180/3.1415926) // radians to degrees
 #define GS_LAT 42.655583
 #define GS_LON -71.325433
 #define ELEV 0.061 // Lowell ASL + Olney Height; Kilometers for some reason.
@@ -34,17 +33,28 @@ const char TLE[2][70] = {"1 25544U 98067A   21225.01742615  .00000967  00000-0  
 /**
  * @brief Opens a serial connection.
  * 
- * @return int Connection value.
+ * @param devname Name of the device.
+ * @return int File descriptor on success, negative on failure.
  */
-int open_connection();
+int open_connection(char *devname);
 
 /**
- * @brief Commands the dish aim at this angle.
+ * @brief 
  * 
- * @param angle 
+ * @param connection 
+ * @param azimuth 
  * @return int 
  */
-int aim_at(CoordTopocentric angle);
+int aim_azimuth(int connection, double azimuth);
+
+/**
+ * @brief 
+ * 
+ * @param connection 
+ * @param elevation 
+ * @return int 
+ */
+int aim_elevation(int connection, double elevation);
 
 /**
  * @brief Finds the topocentric coordinates of the next targetrise.

@@ -20,16 +20,21 @@
 #include "meb_debug.h"
 #include "track.hpp"
 
-int open_connection()
+int open_connection(char *devname)
 {
-    int connection = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY | O_NDELAY);
+    if (devname == nullptr)
+    {
+        dbprintlf(RED_FG "Device name null!");
+        return -1;
+    }
+
+    int connection = open(devname, O_RDWR | O_NOCTTY | O_NDELAY);
     if (connection < 3)
     {
         dbprintlf(RED_FG "Unable to open serial connection.");
         return -1;
     }
 
-    // TODO: Check these options, they may be incorrect.
     struct termios options[1];
     tcgetattr(connection, options);
     options->c_cflag = B2400 | CS8 | CLOCAL | CREAD;
@@ -42,11 +47,36 @@ int open_connection()
     return connection;
 }
 
-int aim_at(CoordTopocentric angle)
+int aim_azimuth(int connection, double azimuth)
 {
-    // Command the dish manuever to angle.azimuth radians of azimuth and angle.elevation radians of elevation.
+    // Command the dish manuever azimuth.
 
-    // TODO: Command an angle.
+    char command[7];
+    snprintf(command, sizeof(command), "PB %d\r", (int)(azimuth DEG));
+
+    ssize_t az_bytes = write(connection, command, sizeof(command));
+    if (az_bytes != sizeof(command))
+    {
+        dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
+        return -1;
+    }
+
+    return 1;
+}
+
+int aim_elevation(int connection, double elevation)
+{
+    // Command the dish manuever elevation.
+
+    char command[7];
+    snprintf(command, sizeof(command), "PB %d\r", (int)(elevation DEG));
+
+    ssize_t el_bytes = write(connection, command, sizeof(command));
+    if (el_bytes != sizeof(command))
+    {
+        dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
+        return -1;
+    }
 
     return 1;
 }
