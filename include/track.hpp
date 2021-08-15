@@ -27,10 +27,11 @@ typedef struct
 {
     // uhf_modem_t modem; // Just an int.
     int uhf_initd;
-    network_data_t network_data[1];
+    NetDataClient *network_data;
     uint8_t netstat;
     char devname[32];
     double AzEl[2]; // Azimuth, Elevation
+    int connection;
 } global_data_t;
 
 /**
@@ -94,5 +95,11 @@ void *tracking_thread(void *args);
  * @return void* 
  */
 void *gs_network_rx_thread(void *args);
+
+/**
+ * @brief Periodically sends X-Band status updates.
+ * 
+ */
+void *track_status_thread(void *args);
 
 #endif // TRACK_HPP

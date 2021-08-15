@@ -23,12 +23,11 @@
 
 int main(int argc, char *argv[])
 {
-    global_data_t global_data[1] = {0};
-    network_data_init(global_data->network_data, SERVER_PORT);
-    global_data->network_data->rx_active = true;
-    global_data->network_data->thread_status = 1;
+    global_data_t global[1] = {0};
+    global->network_data = new NetDataClient(NetPort::TRACK, SERVER_POLL_RATE);
+    global->network_data->recv_active = true;    
 
-    strcpy(global_data->devname, "/dev/ttyUSB0");
+    strcpy(global->devname, "/dev/ttyUSB0");
 
     if (argc > 2)
     {
@@ -37,23 +36,25 @@ int main(int argc, char *argv[])
     }
     else if (argc == 2)
     {
-        strcpy(global_data->devname, argv[1]);
+        strcpy(global->devname, argv[1]);
     }
 
-    pthread_t net_polling_tid, net_rx_tid, tracking_tid;
+    pthread_t net_polling_tid, net_rx_tid, tracking_tid, track_status_tid;
 
-    while (global_data->network_data->thread_status > -1)
+    while (global->network_data->thread_status > -1)
     {
-        global_data->network_data->thread_status = 1;
+        global->network_data->thread_status = 1;
 
-        pthread_create(&net_polling_tid, NULL, gs_polling_thread, &global_data->network_data);
-        pthread_create(&net_rx_tid, NULL, gs_network_rx_thread, global_data);
-        pthread_create(&tracking_tid, NULL, tracking_thread, global_data);
+        pthread_create(&net_polling_tid, NULL, gs_polling_thread, global->network_data);
+        pthread_create(&net_rx_tid, NULL, gs_network_rx_thread, global);
+        pthread_create(&tracking_tid, NULL, tracking_thread, global);
+        pthread_create(&track_status_tid, NULL, track_status_thread, global);
 
         void *thread_return;
         pthread_join(net_polling_tid, &thread_return);
         pthread_join(net_rx_tid, &thread_return);
         pthread_join(tracking_tid, &thread_return);
+        pthread_join(track_status_tid, &thread_return);
 
         usleep(1 SEC);
     }
@@ -63,16 +64,18 @@ int main(int argc, char *argv[])
     pthread_cancel(net_polling_tid);
     pthread_cancel(net_rx_tid);
     pthread_cancel(tracking_tid);
+    pthread_cancel(track_status_tid);
     thread_return == PTHREAD_CANCELED ? printf("Good net_polling_tid join.\n") : printf("Bad net_polling_tid join.\n");
     pthread_join(net_rx_tid, &thread_return);
     thread_return == PTHREAD_CANCELED ? printf("Good net_rx_tid join.\n") : printf("Bad net_rx_tid join.\n");
     pthread_join(tracking_tid, &thread_return);
     thread_return == PTHREAD_CANCELED ? printf("Good tracking_tid join.\n") : printf("Bad tracking_tid join.\n");
+    pthread_join(track_status_tid, &thread_return);
+    thread_return == PTHREAD_CANCELED ? printf("Good track_status_tid join.\n") : printf("Bad track_status_tid join.\n");
 
-    close(global_data->network_data->socket);
+    close(global->network_data->socket);
 
-    return global_data->network_data->thread_status;
-
-    
-    return 1;
+    int retval = global->network_data->thread_status;
+    delete global->network_data;
+    return retval;
 }

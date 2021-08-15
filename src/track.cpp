@@ -21,6 +21,7 @@
 #include "SGP4.h"
 #include "meb_debug.h"
 #include "track.hpp"
+#include "network.hpp"
 
 int open_connection(char *devname)
 {
@@ -96,15 +97,20 @@ CoordTopocentric find_next_targetrise(SGP4 *target, Observer *dish)
 
 void *tracking_thread(void *args)
 {
-    global_data_t *global_data = (global_data_t *) args;
+    dbprintlf(GREEN_FG "TRACKING THREAD STARTING");
 
-    // Open a connection to the dish controller.
-    int connection = open_connection(global_data->devname);
-    if (connection < 3)
+    global_data_t *global = (global_data_t *)args;
+
+    while (global->connection < 3)
     {
-        dbprintlf(FATAL "Device not found.");
-        global_data->network_data->thread_status = 0;
-        return NULL;
+        // Open a connection to the dish controller.
+        global->connection = open_connection(global->devname);
+
+        if (global->connection < 3)
+        {
+            dbprintlf(RED_FG "Device not found.");
+            usleep(5 SEC);
+        }
     }
 
     SGP4 *target = new SGP4(Tle(TLE[0], TLE[1]));
@@ -131,22 +137,26 @@ void *tracking_thread(void *args)
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
 
         // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
-        if (ideal.azimuth DEG - global_data->AzEl[0] < -1 || ideal.azimuth DEG - global_data->AzEl[0] > 1)
+        if (ideal.azimuth DEG - global->AzEl[0] < -1 || ideal.azimuth DEG - global->AzEl[0] > 1)
         {
-            aim_azimuth(connection, ideal.azimuth DEG);
-            global_data->AzEl[0] = ideal.azimuth DEG;
+            aim_azimuth(global->connection, ideal.azimuth DEG);
+            global->AzEl[0] = ideal.azimuth DEG;
 
             // Send our updated coordinates.
-            gs_network_transmit(global_data->network_data, CS_TYPE_TRACKING_DATA, CS_ENDPOINT_CLIENT, global_data->AzEl, sizeof(global_data->AzEl));
+            NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
+            network_frame->sendFrame(global->network_data);
+            delete network_frame;
         }
 
-        if (ideal.elevation DEG - global_data->AzEl[1] < -1 || ideal.elevation DEG - global_data->AzEl[1] > 1)
+        if (ideal.elevation DEG - global->AzEl[1] < -1 || ideal.elevation DEG - global->AzEl[1] > 1)
         {
-            aim_elevation(connection, ideal.elevation DEG);
-            global_data->AzEl[1] = ideal.elevation DEG;
+            aim_elevation(global->connection, ideal.elevation DEG);
+            global->AzEl[1] = ideal.elevation DEG;
 
             // Send our updated coordinates.
-            gs_network_transmit(global_data->network_data, CS_TYPE_TRACKING_DATA, CS_ENDPOINT_CLIENT, global_data->AzEl, sizeof(global_data->AzEl));
+            NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
+            network_frame->sendFrame(global->network_data);
+            delete network_frame;
         }
 
         usleep(1 SEC);
@@ -154,24 +164,27 @@ void *tracking_thread(void *args)
 
     delete dish;
     delete target;
-    close(connection);
+    close(global->connection);
 
-    if (global_data->network_data->thread_status > 0)
+    dbprintlf(RED_BG "TRACKING THREAD EXITING");
+    if (global->network_data->thread_status > 0)
     {
-        global_data->network_data->thread_status = 0;
+        global->network_data->thread_status = 0;
     }
     return NULL;
 }
 
 void *gs_network_rx_thread(void *args)
 {
-    global_data_t *global_data = (global_data_t *)args;
-    network_data_t *network_data = global_data->network_data;
+    dbprintlf(GREEN_FG "GS NETWORK RX THREAD STARTING");
+
+    global_data_t *global = (global_data_t *)args;
+    NetDataClient *network_data = global->network_data;
 
     // Similar, if not identical, to the network functionality in ground_station.
     // Roof UHF is a network client to the GS Server, and so should be very similar in socketry to ground_station.
 
-    while (network_data->rx_active && global_data->network_data->thread_status > 0)
+    while (network_data->recv_active && global->network_data->thread_status > 0)
     {
         if (!network_data->connection_ready)
         {
@@ -181,9 +194,9 @@ void *gs_network_rx_thread(void *args)
 
         int read_size = 0;
 
-        while (read_size >= 0 && network_data->rx_active)
+        while (read_size >= 0 && network_data->recv_active)
         {
-            char buffer[sizeof(NetworkFrame) * 2];
+            char buffer[sizeof(NetFrame) * 2];
             memset(buffer, 0x0, sizeof(buffer));
 
             dbprintlf(BLUE_BG "Waiting to receive...");
@@ -200,21 +213,21 @@ void *gs_network_rx_thread(void *args)
                 printf("(END)\n");
 
                 // Parse the data by mapping it to a NetworkFrame.
-                NetworkFrame *network_frame = (NetworkFrame *)buffer;
+                NetFrame *network_frame = (NetFrame *)buffer;
 
                 // Check if we've received data in the form of a NetworkFrame.
-                if (network_frame->checkIntegrity() < 0)
+                if (network_frame->validate() < 0)
                 {
-                    dbprintlf("Integrity check failed (%d).", network_frame->checkIntegrity());
+                    dbprintlf("Integrity check failed (%d).", network_frame->validate());
                     continue;
                 }
                 dbprintlf("Integrity check successful.");
 
-                global_data->netstat = network_frame->getNetstat();
+                global->netstat = network_frame->getNetstat();
 
                 // For now, just print the Netstat.
                 uint8_t netstat = network_frame->getNetstat();
-                dbprintlf(BLUE_FG "NETWORK STATUS");
+                dbprintlf(BLUE_FG "NETWORK STATUS (%d)", netstat);
                 dbprintf("GUI Client ----- ");
                 ((netstat & 0x80) == 0x80) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
                 dbprintf("Roof UHF ------- ");
@@ -223,6 +236,8 @@ void *gs_network_rx_thread(void *args)
                 ((netstat & 0x20) == 0x20) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
                 dbprintf("Haystack ------- ");
                 ((netstat & 0x10) == 0x10) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
+                dbprintf("Track ---------- ");
+                ((netstat & 0x8) == 0x8) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
 
                 // Extract the payload into a buffer.
                 int payload_size = network_frame->getPayloadSize();
@@ -244,52 +259,37 @@ void *gs_network_rx_thread(void *args)
                     continue;
                 }
 
-                NETWORK_FRAME_TYPE type = network_frame->getType();
-                switch (type)
+                switch (network_frame->getType())
                 {
-                case CS_TYPE_TRACKING_CONFIG:
+                case NetType::TRACKING_COMMAND:
                 {
-                    dbprintlf(BLUE_FG "Received a tracking configuration.");
+                    dbprintlf(BLUE_FG "Received a tracking command.");
 
-                    // TODO: Apply some configuration.
+                    double AzEl[2] = {0};
+                    network_frame->retrievePayload((unsigned char *)AzEl, sizeof(AzEl));
+
+                    dbprintlf(BLUE_FG "Setting AzEl to: %d, %d", AzEl[0], AzEl[1]);
+
+                    aim_azimuth(global->connection, AzEl[0]);
+                    global->AzEl[0] = AzEl[0];
+                    aim_azimuth(global->connection, AzEl[1]);
+                    global->AzEl[1] = AzEl[1];
+
+                    // Send our updated coordinates.
+                    NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
+                    network_frame->sendFrame(global->network_data);
+                    delete network_frame;
 
                     break;
                 }
-                case CS_TYPE_TRACKING_DATA:
+                case NetType::ACK:
                 {
-                    // If we receive this, then we are being polled.
-                    // Typically this is sent automatically.
-                    dbprintlf(BLUE_FG "Received a tracking data request.");
-
-                    gs_network_transmit(network_data, CS_TYPE_TRACKING_DATA, CS_ENDPOINT_CLIENT, global_data->AzEl, sizeof(global_data->AzEl));
-                    
                     break;
                 }
-                case CS_TYPE_ACK:
+                case NetType::NACK:
                 {
-                    dbprintlf(BLUE_FG "Received an ACK frame!");
                     break;
                 }
-                case CS_TYPE_NACK:
-                {
-                    dbprintlf(BLUE_FG "Received a NACK frame!");
-                    break;
-                }
-                case CS_TYPE_CONFIG_UHF:
-                {
-                    dbprintlf(BLUE_FG "Received an UHF CONFIG frame!");
-                    break;
-                }
-                case CS_TYPE_DATA:
-                {
-                    dbprintlf(BLUE_FG "Received a DATA frame!");
-                    break;
-                }
-                case CS_TYPE_POLL_XBAND_CONFIG:
-                case CS_TYPE_XBAND_COMMAND:
-                case CS_TYPE_CONFIG_XBAND:
-                case CS_TYPE_NULL:
-                case CS_TYPE_ERROR:
                 default:
                 {
                     break;
@@ -309,26 +309,50 @@ void *gs_network_rx_thread(void *args)
         if (read_size == 0)
         {
             dbprintlf(RED_BG "Connection forcibly closed by the server.");
-            strcpy(network_data->discon_reason, "SERVER-FORCED");
+            strcpy(network_data->disconnect_reason, "SERVER-FORCED");
             network_data->connection_ready = false;
             continue;
         }
         else if (errno == EAGAIN)
         {
             dbprintlf(YELLOW_BG "Active connection timed-out (%d).", read_size);
-            strcpy(network_data->discon_reason, "TIMED-OUT");
+            strcpy(network_data->disconnect_reason, "TIMED-OUT");
             network_data->connection_ready = false;
             continue;
         }
         erprintlf(errno);
     }
 
-    network_data->rx_active = false;
-    dbprintlf(FATAL "DANGER! NETWORK RECEIVE THREAD IS RETURNING!");
+    network_data->recv_active = false;
 
-    if (global_data->network_data->thread_status > 0)
+    dbprintlf(RED_BG "GS NETWORK RECEIVE THREAD EXITING");
+    if (global->network_data->thread_status > 0)
     {
-        global_data->network_data->thread_status = 0;
+        global->network_data->thread_status = 0;
     }
     return NULL;
+}
+
+void *track_status_thread(void *args)
+{
+    dbprintlf(GREEN_FG "TRACK STATUS THREAD STARTING");
+
+    global_data_t *global = (global_data_t *)args;
+    NetDataClient *network_data = global->network_data;
+
+    while (network_data->thread_status > 0)
+    {
+        // Send our coordinates.
+        NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
+        network_frame->sendFrame(global->network_data);
+        delete network_frame;
+
+        usleep(10 SEC);
+    }
+
+    dbprintlf(RED_BG "TRACK STATUS THREAD EXITING");
+    if (global->network_data->thread_status > 0)
+    {
+        global->network_data->thread_status = 0;
+    }
 }
