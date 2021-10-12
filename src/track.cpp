@@ -56,6 +56,9 @@ int open_connection(char *devname)
 // Azimuth in DEGREES
 int aim_azimuth(int connection, double azimuth)
 {
+    azimuth += AZIM_ADJ;
+    azimuth = azimuth < 0 ? 360.0 + azimuth : azimuth;
+    
     // Command the dish manuever azimuth.
     const int command_size = 0x10;
     char command[command_size];
@@ -156,8 +159,9 @@ void *tracking_thread(void *args)
             // ideal = find_next_targetrise(target, dish);
             // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
             obscured_azel = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
-            ideal.azimuth = 1.5708; // 90deg, this is in radians.
-            ideal.elevation = 0;
+            // ideal.azimuth = 1.5708; // 90deg, this is in radians.
+            // ideal.elevation = 0;
+            /// D O   N O T   C H A N G E   A Z E L   W H E N   P A R K E D
             dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f (%.2f:%.2f)", ideal.azimuth DEG, ideal.elevation DEG, obscured_azel.azimuth DEG, obscured_azel.elevation DEG);
         }
 

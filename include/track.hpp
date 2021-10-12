@@ -23,6 +23,8 @@
 #define GS_LON -71.325433
 #define ELEV 0.061 // Lowell ASL + Olney Height; Kilometers for some reason.
 #define MIN_ELEV 10.0 // degrees
+#define ELEV_ADJ 0 // degrees adjustment +-
+#define AZIM_ADJ -34 // degrees adjustment +-
 
 typedef struct
 {
