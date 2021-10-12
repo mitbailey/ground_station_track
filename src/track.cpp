@@ -129,17 +129,24 @@ void *tracking_thread(void *args)
     // double current_azimuth = 0;
     // double current_elevation = 0;
 
+    bool sat_viewable_last_pass = false;
+    bool sat_viewable = false;
+    double pass_start_Az = 0.0;
+    double pass_start_El = 0.0;
+
     for (;;)
     {
         // Establish if the target is visible.
-        if (dish->GetLookAngle(target->FindPosition(DateTime::Now(true))).elevation > MIN_ELEV)
+        if (dish->GetLookAngle(target->FindPosition(DateTime::Now(true))).elevation DEG > MIN_ELEV)
         { // The target is visible.
+            sat_viewable = true;
             // Find the angle to the target.
             ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
             dbprintlf(GREEN_FG "IDEAL AT   AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
         }
         else
         { // The target is not visible.
+            sat_viewable = false;
             // Find the angle to the next targetrise.
             dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
             // ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
@@ -153,12 +160,11 @@ void *tracking_thread(void *args)
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
 
-        bool azel_adjusted = false;
+        
 
         // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
         if (ideal.azimuth DEG - global->AzEl[0] < -1 || ideal.azimuth DEG - global->AzEl[0] > 1)
         {
-            azel_adjusted = true;
             aim_azimuth(global->connection, ideal.azimuth DEG);
             global->AzEl[0] = ideal.azimuth DEG;
 
@@ -170,7 +176,6 @@ void *tracking_thread(void *args)
 
         if (ideal.elevation DEG - global->AzEl[1] < -1 || ideal.elevation DEG - global->AzEl[1] > 1)
         {
-            azel_adjusted = true;
             aim_elevation(global->connection, ideal.elevation DEG);
             global->AzEl[1] = ideal.elevation DEG;
 
@@ -180,19 +185,19 @@ void *tracking_thread(void *args)
             delete network_frame;
         }
 
-        if (azel_adjusted)
+        if (sat_viewable && !sat_viewable_last_pass)
         {
-            FILE *fp = fopen("last_pass.txt", "a");
-            if (fp != NULL)
-            {
-                fprintf(fp, "%d %d\n", (int)global->AzEl[0], (int)global->AzEl[1]);
-
-                fclose(fp);
-            }
-            else
-            {
-                dbprintlf(RED_FG "Could not open last_pass.txt!");
-            }
+            dbprintlf(BLUE_FG "LOGGING STARTING AZEL OF THIS PASS");
+            sat_viewable_last_pass = true;
+            pass_start_Az = global->AzEl[0];
+            pass_start_El = global->AzEl[1];
+        }
+        else if (!sat_viewable && sat_viewable_last_pass)
+        {
+            dbprintlf(BLUE_FG "RETRACING TO STARTING AZEL OF THIS PASS");
+            sat_viewable_last_pass = false;
+            aim_azimuth(global->connection, pass_start_Az);
+            aim_elevation(global->connection, pass_start_El);
         }
 
         dbprintlf(BLUE_FG "CURRENT AZEL: %f:%f", global->AzEl[0], global->AzEl[1]);
