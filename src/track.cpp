@@ -57,7 +57,10 @@ int aim_azimuth(int connection, double azimuth)
     char command[command_size];
     snprintf(command, command_size, "PB %d\r", (int)(azimuth DEG));
 
-    ssize_t az_bytes = write(connection, command, command_size);
+    dbprintlf(BLUE_FG "COMMANDING AZ: %s", command);
+
+    ssize_t az_bytes = 0;
+    // ssize_t az_bytes = write(connection, command, command_size);
     if (az_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
@@ -74,7 +77,10 @@ int aim_elevation(int connection, double elevation)
     char command[command_size];
     snprintf(command, command_size, "PB %d\r", (int)(elevation DEG));
 
-    ssize_t el_bytes = write(connection, command, command_size);
+    dbprintlf(BLUE_FG "COMMANDING EL: %s", command);
+
+    ssize_t el_bytes = 0;
+    // ssize_t el_bytes = write(connection, command, command_size);
     if (el_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
@@ -131,6 +137,7 @@ void *tracking_thread(void *args)
         else
         { // The target is not visible.
             // Find the angle to the next targetrise.
+            dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
             ideal = find_next_targetrise(target, dish);
         }
 
