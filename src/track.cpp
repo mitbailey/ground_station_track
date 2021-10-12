@@ -50,6 +50,9 @@ int open_connection(char *devname)
     return connection;
 }
 
+// PB = Azimuth Command
+// PA = Elevation Command
+
 // Azimuth in DEGREES
 int aim_azimuth(int connection, double azimuth)
 {
@@ -58,10 +61,10 @@ int aim_azimuth(int connection, double azimuth)
     char command[command_size];
     snprintf(command, command_size, "PB %d\r", (int)(azimuth));
 
-    dbprintlf(BLUE_FG "COMMANDING AZ (%.2f): %s", azimuth, command);
+    dbprintlf(GREEN_FG "COMMANDING AZ (%.2f): %s", azimuth, command);
 
     ssize_t az_bytes = 0;
-    // ssize_t az_bytes = write(connection, command, command_size);
+    az_bytes = write(connection, command, command_size);
     if (az_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
@@ -77,12 +80,12 @@ int aim_elevation(int connection, double elevation)
     // Command the dish manuever elevation.
     const int command_size = 0x10;
     char command[command_size];
-    snprintf(command, command_size, "PB %d\r", (int)(elevation));
+    snprintf(command, command_size, "PA %d\r", (int)(elevation));
 
-    dbprintlf(BLUE_FG "COMMANDING EL (%.2f): %s", elevation, command);
+    dbprintlf(GREEN_FG "COMMANDING EL (%.2f): %s", elevation, command);
 
     ssize_t el_bytes = 0;
-    // ssize_t el_bytes = write(connection, command, command_size);
+    el_bytes = write(connection, command, command_size);
     if (el_bytes != command_size)
     {
         dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
