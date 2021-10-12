@@ -125,7 +125,7 @@ void *tracking_thread(void *args)
 
     // double current_azimuth = 0;
     // double current_elevation = 0;
-    
+
     for (;;)
     {
         // Establish if the target is visible.
@@ -167,7 +167,8 @@ void *tracking_thread(void *args)
             delete network_frame;
         }
 
-        dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", global->AzEl[0], global->AzEl[1]);
+        dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", ideal.azimuth DEG, ideal.elevation DEG);
+        // dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", global->AzEl[0], global->AzEl[1]);
 
         usleep(1 SEC);
     }
