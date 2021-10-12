@@ -50,12 +50,13 @@ int open_connection(char *devname)
     return connection;
 }
 
+// Azimuth in DEGREES
 int aim_azimuth(int connection, double azimuth)
 {
     // Command the dish manuever azimuth.
     const int command_size = 0x10;
     char command[command_size];
-    snprintf(command, command_size, "PB %d\r", (int)(azimuth DEG));
+    snprintf(command, command_size, "PB %d\r", (int)(azimuth));
 
     dbprintlf(BLUE_FG "COMMANDING AZ (%.2f): %s", azimuth, command);
 
@@ -70,12 +71,13 @@ int aim_azimuth(int connection, double azimuth)
     return 1;
 }
 
+// Elevation in DEGREES
 int aim_elevation(int connection, double elevation)
 {
     // Command the dish manuever elevation.
     const int command_size = 0x10;
     char command[command_size];
-    snprintf(command, command_size, "PB %d\r", (int)(elevation DEG));
+    snprintf(command, command_size, "PB %d\r", (int)(elevation));
 
     dbprintlf(BLUE_FG "COMMANDING EL (%.2f): %s", elevation, command);
 
