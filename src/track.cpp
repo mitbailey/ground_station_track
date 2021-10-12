@@ -244,82 +244,42 @@ void *gs_network_rx_thread(void *args)
             NetFrame *netframe = new NetFrame();
             read_size = netframe->recvFrame(network_data);
 
-
-
-
-
-
-            char buffer[sizeof(NetFrame) * 2];
-            memset(buffer, 0x0, sizeof(buffer));
-
-            dbprintlf(BLUE_BG "Waiting to receive...");
-            read_size = recv(network_data->socket, buffer, sizeof(buffer), 0);
             dbprintlf("Read %d bytes.", read_size);
 
-            if (read_size > 0)
+            if (read_size >= 0)
             {
-                dbprintf("RECEIVED (hex): ");
-                for (int i = 0; i < read_size; i++)
-                {
-                    printf("%02x", buffer[i]);
-                }
-                printf("(END)\n");
-
-                // Parse the data by mapping it to a NetworkFrame.
-                NetFrame *network_frame = (NetFrame *)buffer;
-
-                // Check if we've received data in the form of a NetworkFrame.
-                if (network_frame->validate() < 0)
-                {
-                    dbprintlf("Integrity check failed (%d).", network_frame->validate());
-                    continue;
-                }
-                dbprintlf("Integrity check successful.");
-
-                global->netstat = network_frame->getNetstat();
-
-                // For now, just print the Netstat.
-                uint8_t netstat = network_frame->getNetstat();
-                dbprintlf(BLUE_FG "NETWORK STATUS (%d)", netstat);
-                dbprintf("GUI Client ----- ");
-                ((netstat & 0x80) == 0x80) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
-                dbprintf("Roof UHF ------- ");
-                ((netstat & 0x40) == 0x40) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
-                dbprintf("Roof X-Band ---- ");
-                ((netstat & 0x20) == 0x20) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
-                dbprintf("Haystack ------- ");
-                ((netstat & 0x10) == 0x10) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
-                dbprintf("Track ---------- ");
-                ((netstat & 0x8) == 0x8) ? printf(GREEN_FG "ONLINE" RESET_ALL "\n") : printf(RED_FG "OFFLINE" RESET_ALL "\n");
+                dbprintlf("Received the following NetFrame:");
+                netframe->print();
+                netframe->printNetstat();
 
                 // Extract the payload into a buffer.
-                int payload_size = network_frame->getPayloadSize();
+                int payload_size = netframe->getPayloadSize();
                 unsigned char *payload = (unsigned char *)malloc(payload_size);
-                if (payload == NULL)
+                if (payload == nullptr)
                 {
                     dbprintlf(FATAL "Memory for payload failed to allocate, packet lost.");
                     continue;
                 }
 
-                if (network_frame->retrievePayload(payload, payload_size) < 0)
+                if (netframe->retrievePayload(payload, payload_size) < 0)
                 {
                     dbprintlf(RED_FG "Error retrieving data.");
-                    if (payload != NULL)
+                    if (payload != nullptr)
                     {
                         free(payload);
-                        payload = NULL;
+                        payload = nullptr;
                     }
                     continue;
                 }
 
-                switch (network_frame->getType())
+                switch (netframe->getType())
                 {
                 case NetType::TRACKING_COMMAND:
                 {
                     dbprintlf(BLUE_FG "Received a tracking command.");
 
                     double AzEl[2] = {0};
-                    network_frame->retrievePayload((unsigned char *)AzEl, sizeof(AzEl));
+                    netframe->retrievePayload((unsigned char *)AzEl, sizeof(AzEl));
 
                     // dbprintlf(BLUE_FG "Setting AzEl to: %d, %d", AzEl[0], AzEl[1]);
 
@@ -348,42 +308,38 @@ void *gs_network_rx_thread(void *args)
                     break;
                 }
                 }
-                if (payload != NULL)
+                if (payload != nullptr)
                 {
                     free(payload);
-                    payload = NULL;
+                    payload = nullptr;
                 }
             }
             else
             {
                 break;
             }
+
+            delete netframe;
         }
-        if (read_size == 0)
+        if (read_size == -404)
         {
-            dbprintlf(RED_BG "Connection forcibly closed by the server.");
-            strcpy(network_data->disconnect_reason, "SERVER-FORCED");
-            network_data->connection_ready = false;
-            continue;
+
         }
         else if (errno == EAGAIN)
         {
-            dbprintlf(YELLOW_BG "Active connection timed-out (%d).", read_size);
-            strcpy(network_data->disconnect_reason, "TIMED-OUT");
-            network_data->connection_ready = false;
-            continue;
+
         }
         erprintlf(errno);
     }
 
     network_data->recv_active = false;
 
-    dbprintlf(RED_BG "GS NETWORK RECEIVE THREAD EXITING");
+    dbprintlf(FATAL "DANGER! NETWORK RECEIVE THREAD IS RETURNING!");
     if (global->network_data->thread_status > 0)
     {
         global->network_data->thread_status = 0;
     }
-    return NULL;
+    return nullptr;
 }
 
 void *track_status_thread(void *args)
