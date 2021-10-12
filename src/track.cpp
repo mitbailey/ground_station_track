@@ -122,6 +122,7 @@ void *tracking_thread(void *args)
     SGP4 *target = new SGP4(Tle(TLE[0], TLE[1]));
     Observer *dish = new Observer(GS_LAT, GS_LON, ELEV);
     CoordTopocentric ideal;
+    CoordTopocentric obscured_azel; // only used for debug printing of 
 
     // double current_azimuth = 0;
     // double current_elevation = 0;
@@ -142,9 +143,10 @@ void *tracking_thread(void *args)
             // ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
             // ideal = find_next_targetrise(target, dish);
             // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
+            obscured_azel = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
             ideal.azimuth = 1.5708; // 90deg, this is in radians.
             ideal.elevation = 0;
-            dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
+            dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f (%.2f:%.2f)", ideal.azimuth DEG, ideal.elevation DEG, obscured_azel.azimuth DEG, obscured_azel.elevation DEG);
         }
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
