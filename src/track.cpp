@@ -93,7 +93,7 @@ int aim_elevation(int connection, double elevation)
 CoordTopocentric find_next_targetrise(SGP4 *target, Observer *dish)
 {
     DateTime time(DateTime::Now(true));
-    while (dish->GetLookAngle(target->FindPosition(DateTime(time))).elevation < 0.f)
+    while (dish->GetLookAngle(target->FindPosition(DateTime(time))).elevation < MIN_ELEV)
     {
         time = time + TimeSpan(0, 1, 0);
     }
