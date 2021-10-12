@@ -140,8 +140,11 @@ void *tracking_thread(void *args)
             // Find the angle to the next targetrise.
             dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
             // ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
-            ideal = find_next_targetrise(target, dish);
-            dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
+            // ideal = find_next_targetrise(target, dish);
+            // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
+            ideal.azimuth = 1.5708; // 90deg, this is in radians.
+            ideal.elevation = 0;
+            dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
         }
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
