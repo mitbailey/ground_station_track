@@ -125,7 +125,7 @@ void *tracking_thread(void *args)
 
     // double current_azimuth = 0;
     // double current_elevation = 0;
-
+    
     for (;;)
     {
         // Establish if the target is visible.
