@@ -153,9 +153,12 @@ void *tracking_thread(void *args)
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
 
+        bool azel_adjusted = false;
+
         // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
         if (ideal.azimuth DEG - global->AzEl[0] < -1 || ideal.azimuth DEG - global->AzEl[0] > 1)
         {
+            azel_adjusted = true;
             aim_azimuth(global->connection, ideal.azimuth DEG);
             global->AzEl[0] = ideal.azimuth DEG;
 
@@ -167,6 +170,7 @@ void *tracking_thread(void *args)
 
         if (ideal.elevation DEG - global->AzEl[1] < -1 || ideal.elevation DEG - global->AzEl[1] > 1)
         {
+            azel_adjusted = true;
             aim_elevation(global->connection, ideal.elevation DEG);
             global->AzEl[1] = ideal.elevation DEG;
 
@@ -174,6 +178,21 @@ void *tracking_thread(void *args)
             NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
             network_frame->sendFrame(global->network_data);
             delete network_frame;
+        }
+
+        if (azel_adjusted)
+        {
+            FILE *fp = fopen("last_pass.txt", "a");
+            if (fp != NULL)
+            {
+                fprintf(fp, "%d %d\n", (int)global->AzEl[0], (int)global->AzEl[1]);
+
+                fclose(fp);
+            }
+            else
+            {
+                dbprintlf(RED_FG "Could not open last_pass.txt!");
+            }
         }
 
         dbprintlf(BLUE_FG "CURRENT AZEL: %f:%f", global->AzEl[0], global->AzEl[1]);
