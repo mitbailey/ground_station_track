@@ -166,6 +166,8 @@ void *tracking_thread(void *args)
             delete network_frame;
         }
 
+        dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", global->AzEl[0], global->AzEl[1]);
+
         usleep(1 SEC);
     }
 

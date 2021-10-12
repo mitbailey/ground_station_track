@@ -15,7 +15,7 @@
 #include "CoordTopocentric.h"
 #include "network.hpp"
 
-#define SERVER_PORT 54240
+#define SERVER_PORT 52040
 
 #define SEC *1000000 // nanoseconds to seconds
 #define DEG *(180/3.1415926) // radians to degrees
