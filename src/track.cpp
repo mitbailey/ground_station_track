@@ -138,7 +138,8 @@ void *tracking_thread(void *args)
         { // The target is not visible.
             // Find the angle to the next targetrise.
             dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
-            ideal = find_next_targetrise(target, dish);
+            ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+            // ideal = find_next_targetrise(target, dish);
         }
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
