@@ -57,7 +57,7 @@ int aim_azimuth(int connection, double azimuth)
     char command[command_size];
     snprintf(command, command_size, "PB %d\r", (int)(azimuth DEG));
 
-    dbprintlf(BLUE_FG "COMMANDING AZ: %s", command);
+    dbprintlf(BLUE_FG "COMMANDING AZ (%.2f): %s", azimuth, command);
 
     ssize_t az_bytes = 0;
     // ssize_t az_bytes = write(connection, command, command_size);
@@ -77,7 +77,7 @@ int aim_elevation(int connection, double elevation)
     char command[command_size];
     snprintf(command, command_size, "PB %d\r", (int)(elevation DEG));
 
-    dbprintlf(BLUE_FG "COMMANDING EL: %s", command);
+    dbprintlf(BLUE_FG "COMMANDING EL (%.2f): %s", elevation, command);
 
     ssize_t el_bytes = 0;
     // ssize_t el_bytes = write(connection, command, command_size);
