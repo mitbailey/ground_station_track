@@ -237,8 +237,18 @@ void *gs_network_rx_thread(void *args)
 
         int read_size = 0;
 
-        while (read_size >= 0 && network_data->recv_active)
+        while (read_size >= 0 && network_data->recv_active && network_data->thread_status > 0)
         {
+            dbprintlf(BLUE_FG "Waiting to receive...");
+
+            NetFrame *netframe = new NetFrame();
+            read_size = netframe->recvFrame(network_data);
+
+
+
+
+
+
             char buffer[sizeof(NetFrame) * 2];
             memset(buffer, 0x0, sizeof(buffer));
 
