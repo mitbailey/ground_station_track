@@ -285,12 +285,12 @@ void *gs_network_rx_thread(void *args)
                     double AzEl[2] = {0};
                     network_frame->retrievePayload((unsigned char *)AzEl, sizeof(AzEl));
 
-                    dbprintlf(BLUE_FG "Setting AzEl to: %d, %d", AzEl[0], AzEl[1]);
+                    // dbprintlf(BLUE_FG "Setting AzEl to: %d, %d", AzEl[0], AzEl[1]);
 
-                    aim_azimuth(global->connection, AzEl[0]);
-                    global->AzEl[0] = AzEl[0];
-                    aim_azimuth(global->connection, AzEl[1]);
-                    global->AzEl[1] = AzEl[1];
+                    // aim_azimuth(global->connection, AzEl[0]);
+                    // global->AzEl[0] = AzEl[0];
+                    // aim_azimuth(global->connection, AzEl[1]);
+                    // global->AzEl[1] = AzEl[1];
 
                     // Send our updated coordinates.
                     NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
