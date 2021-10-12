@@ -128,6 +128,12 @@ void *tracking_thread(void *args)
 
     for (;;)
     {
+        // ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+        // ideal.azimuth
+        // usleep(1 SEC);
+        // continue;
+        // FOR DEBUGGING
+
         // Establish if the target is visible.
         if (dish->GetLookAngle(target->FindPosition(DateTime::Now(true))).elevation > 0.f)
         { // The target is visible.
@@ -167,7 +173,7 @@ void *tracking_thread(void *args)
             delete network_frame;
         }
 
-        dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", ideal.azimuth DEG, ideal.elevation DEG);
+        dbprintlf(GREEN_FG "CURRENT AZEL: %f:%f", ideal.azimuth DEG, ideal.elevation DEG);
         // dbprintlf(GREEN_FG "CURRENT AZEL: %d:%d", global->AzEl[0], global->AzEl[1]);
 
         usleep(1 SEC);
