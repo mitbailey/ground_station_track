@@ -159,9 +159,10 @@ void *tracking_thread(void *args)
             // ideal = find_next_targetrise(target, dish);
             // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
             obscured_azel = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
-            // ideal.azimuth = 1.5708; // 90deg, this is in radians.
-            // ideal.elevation = 0;
-            /// D O   N O T   C H A N G E   A Z E L   W H E N   P A R K E D
+            // ideal.azimuth = 1.5708; // 90deg, this is in radians
+            // Change elevation to 90' when parked.
+            ideal.elevation = 1.5708; // 90deg, this is in radians.
+            /// D O   N O T   C H A N G E   A Z   W H E N   P A R K E D
             dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f (%.2f:%.2f)", ideal.azimuth DEG, ideal.elevation DEG, obscured_azel.azimuth DEG, obscured_azel.elevation DEG);
         }
 
