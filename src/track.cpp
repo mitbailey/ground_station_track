@@ -58,7 +58,7 @@ int aim_azimuth(int connection, double azimuth)
 {
     azimuth += AZIM_ADJ;
     azimuth = azimuth < 0 ? 360.0 + azimuth : azimuth;
-    
+
     // Command the dish manuever azimuth.
     const int command_size = 0x10;
     char command[command_size];
@@ -130,7 +130,7 @@ void *tracking_thread(void *args)
     SGP4 *target = new SGP4(Tle(TLE[0], TLE[1]));
     Observer *dish = new Observer(GS_LAT, GS_LON, ELEV);
     CoordTopocentric ideal;
-    CoordTopocentric obscured_azel; // only used for debug printing of 
+    CoordTopocentric obscured_azel; // only used for debug printing of
 
     // double current_azimuth = 0;
     // double current_elevation = 0;
@@ -140,35 +140,63 @@ void *tracking_thread(void *args)
     double pass_start_Az = 0.0;
     double pass_start_El = 0.0;
 
+    bool track_waiting_to_park = false;
+    int time_to_park = 0;
+    int time_to_ret = 0;
+
     for (;;)
     {
+        CoordTopocentric current_pos = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
         // Establish if the target is visible.
-        if (dish->GetLookAngle(target->FindPosition(DateTime::Now(true))).elevation DEG > MIN_ELEV)
+        if (current_pos.elevation DEG > MIN_ELEV)
         { // The target is visible.
             sat_viewable = true;
             // Find the angle to the target.
-            ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+            ideal = current_pos;
             dbprintlf(GREEN_FG "IDEAL AT   AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
         }
-        else
+        else if (!track_waiting_to_park)
         { // The target is not visible.
             sat_viewable = false;
             // Find the angle to the next targetrise.
             dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
-            // ideal = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+            // ideal = current_pos;
             // ideal = find_next_targetrise(target, dish);
             // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
-            obscured_azel = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+            obscured_azel = current_pos;
             // ideal.azimuth = 1.5708; // 90deg, this is in radians
             // Change elevation to 90' when parked.
             ideal.elevation = M_PI / 2; // 90deg, this is in radians.
             /// D O   N O T   C H A N G E   A Z   W H E N   P A R K E D
             dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f (%.2f:%.2f)", ideal.azimuth DEG, ideal.elevation DEG, obscured_azel.azimuth DEG, obscured_azel.elevation DEG);
+            // sat waiting to park now
+            track_waiting_to_park = true;
+#define TRACKER_RETURN_ZERO_TIME 120
+            time_to_park = TRACKER_RETURN_ZERO_TIME; // 2 minutes
+            time_to_ret = TRACKER_RETURN_ZERO_TIME;
+        }
+        else
+        {
+            if (time_to_park-- > 0)
+                ;
+            else
+            {
+                if (time_to_ret-- > 0)
+                    ;
+            }
+            if (time_to_park == 0 && time_to_ret == TRACKER_RETURN_ZERO_TIME - 1)
+            {
+                ideal.azimuth = 0;
+            }
+            if (time_to_park == 0 && time_to_ret == 0) // both timers are up
+            {
+                track_waiting_to_park = false;
+                time_to_park = 0;
+                time_to_ret = 0;
+            }
         }
 
         // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
-
-        
 
         // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
         if (ideal.azimuth DEG - global->AzEl[0] < -1 || ideal.azimuth DEG - global->AzEl[0] > 1)
@@ -331,11 +359,9 @@ void *gs_network_rx_thread(void *args)
         }
         if (read_size == -404)
         {
-
         }
         else if (errno == EAGAIN)
         {
-
         }
         erprintlf(errno);
     }
