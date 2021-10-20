@@ -20,9 +20,11 @@
 #include "meb_debug.h"
 #include "track.hpp"
 #include "network.hpp"
+#include <signal.h>
 
 int main(int argc, char *argv[])
 {
+    signal(SIGPIPE, SIG_IGN);
     global_data_t global[1] = {0};
     global->network_data = new NetDataClient(NetPort::TRACK, SERVER_POLL_RATE);
     global->network_data->recv_active = true;    

@@ -25,6 +25,10 @@
 
 int open_connection(char *devname)
 {
+#if defined(DISABLE_DEVICE)
+    int connection = 3;
+    dbprintlf(FATAL "Serial device not in use, simulation only");
+#else
     if (devname == NULL)
     {
         dbprintlf(RED_FG "Device name null.");
@@ -46,7 +50,7 @@ int open_connection(char *devname)
     options->c_lflag = 0;
     tcflush(connection, TCIFLUSH);
     tcsetattr(connection, TCSANOW, options);
-
+#endif
     return connection;
 }
 
@@ -56,6 +60,9 @@ int open_connection(char *devname)
 // Azimuth in DEGREES
 int aim_azimuth(int connection, double azimuth)
 {
+#if defined(DISABLE_DEVICE)
+    dbprintlf(FATAL "Serial device not in use, simulation only");
+#else
     azimuth += AZIM_ADJ;
     azimuth = azimuth < 0 ? 360.0 + azimuth : azimuth;
 
@@ -73,13 +80,16 @@ int aim_azimuth(int connection, double azimuth)
         dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
         return -1;
     }
-
+#endif
     return 1;
 }
 
 // Elevation in DEGREES
 int aim_elevation(int connection, double elevation)
 {
+#if defined(DISABLE_DEVICE)
+    dbprintlf(FATAL "Serial device not in use, simulation only");
+#else
     // Command the dish manuever elevation.
     const int command_size = 0x10;
     char command[command_size];
@@ -94,7 +104,7 @@ int aim_elevation(int connection, double elevation)
         dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
         return -1;
     }
-
+#endif
     return 1;
 }
 
@@ -146,7 +156,11 @@ void *tracking_thread(void *args)
 
     for (;;)
     {
-        CoordTopocentric current_pos = dish->GetLookAngle(target->FindPosition(DateTime::Now(true)));
+        Eci pos_now = target->FindPosition(DateTime::Now(true));
+        CoordTopocentric current_pos = dish->GetLookAngle(pos_now);
+        CoordGeodetic current_lla = pos_now.ToGeodetic();
+        dbprintlf(BLUE_BG "Current Pointing: %.2f AZ, %.2f EL", current_pos.azimuth DEG, current_pos.elevation DEG);
+        dbprintlf(BLUE_BG "Current Position: %.2f LA, %.2f LN", current_lla.latitude DEG, current_lla.longitude DEG);
         // Establish if the target is visible.
         if (current_pos.elevation DEG > MIN_ELEV)
         { // The target is visible.
@@ -236,7 +250,7 @@ void *tracking_thread(void *args)
             aim_elevation(global->connection, pass_start_El);
         }
 
-        dbprintlf(BLUE_FG "CURRENT AZEL: %f:%f", global->AzEl[0], global->AzEl[1]);
+        dbprintlf(BLUE_FG "CURRENT AZEL: %.1f:%.1f", global->AzEl[0], global->AzEl[1]);
 
         usleep(1 SEC);
     }
