@@ -1,12 +1,12 @@
 /**
  * @file track.cpp
  * @author Mit Bailey (mitbailey99@gmail.com)
- * @brief 
+ * @brief
  * @version See Git tags for version information.
  * @date 2021.08.12
- * 
+ *
  * @copyright Copyright (c) 2021
- * 
+ *
  */
 
 #include <stdlib.h>
@@ -22,6 +22,7 @@
 #include "meb_debug.h"
 #include "track.hpp"
 #include "network.hpp"
+#include "gpiodev/gpiodev.h"
 
 int open_connection(char *devname)
 {
@@ -57,7 +58,7 @@ int open_connection(char *devname)
 // PB = Azimuth Command
 // PA = Elevation Command
 
-// Azimuth in DEGREES
+// Azimuth in DEGREES, takes 160 ms
 int aim_azimuth(int connection, double azimuth)
 {
 #if defined(DISABLE_DEVICE)
@@ -69,22 +70,24 @@ int aim_azimuth(int connection, double azimuth)
     // Command the dish manuever azimuth.
     const int command_size = 0x10;
     char command[command_size];
-    snprintf(command, command_size, "PB %d\r", (int)(azimuth));
+    snprintf(command, command_size, "PB %03d\r\n", (int)(azimuth));
 
     dbprintlf(GREEN_FG "COMMANDING AZ (%.2f): %s", azimuth, command);
 
-    ssize_t az_bytes = 0;
-    az_bytes = write(connection, command, command_size);
-    if (az_bytes != command_size)
+    for (int i = 0; i < 8; i++)
     {
-        dbprintlf(RED_FG "Error sending azimuth adjustment command to positioner (%d).", az_bytes);
-        return -1;
+        if (write(connection, command + i, 1) != 1)
+        {
+            dbprintlf(FATAL "Writing byte %d/8 of AZ command, error");
+            return -1;
+        }
+        usleep(20000);
     }
 #endif
     return 1;
 }
 
-// Elevation in DEGREES
+// Elevation in DEGREES, takes 160 ms
 int aim_elevation(int connection, double elevation)
 {
 #if defined(DISABLE_DEVICE)
@@ -93,16 +96,18 @@ int aim_elevation(int connection, double elevation)
     // Command the dish manuever elevation.
     const int command_size = 0x10;
     char command[command_size];
-    snprintf(command, command_size, "PA %d\r", (int)(elevation));
+    snprintf(command, command_size, "PA %03d\r\n", (int)(elevation));
 
     dbprintlf(GREEN_FG "COMMANDING EL (%.2f): %s", elevation, command);
 
-    ssize_t el_bytes = 0;
-    el_bytes = write(connection, command, command_size);
-    if (el_bytes != command_size)
+    for (int i = 0; i < 8; i++)
     {
-        dbprintlf(RED_FG "Error sending elevation adjustment command to positioner (%d).", el_bytes);
-        return -1;
+        if (write(connection, command + i, 1) != 1)
+        {
+            dbprintlf(FATAL "Writing byte %d/8 of AZ command, error");
+            return -1;
+        }
+        usleep(20000);
     }
 #endif
     return 1;
@@ -137,122 +142,163 @@ void *tracking_thread(void *args)
         }
     }
 
+    sleep(2);
+    if (global->resetAtInit)
+    {
+        aim_azimuth(global->connection, -AZIM_ADJ);
+        usleep(20000);
+        aim_elevation(global->connection, 90);
+        for (int i = 60; i > 0; i--)
+        {
+            dbprintlf(RED_FG "Init: Sleep remaining %d seconds", i);
+            sleep(1);
+        }
+    }
+
+    char biasctrl_status = 0;
+    if ((biasctrl_status = system("biasctrl -r") >> 8) < 0)
+    {
+        dbprintlf(FATAL "Could not reset bias controller, exiting, code %d", biasctrl_status);
+        exit(0);
+    }
+    if ((biasctrl_status = system("biasctrl -s -3.0") >> 8) < 0)
+    {
+        dbprintlf(FATAL "Could not reset bias voltage, exiting, code %d", biasctrl_status);
+        exit(0);
+    }
+
     SGP4 *target = new SGP4(Tle(TLE[0], TLE[1]));
     Observer *dish = new Observer(GS_LAT, GS_LON, ELEV);
-    CoordTopocentric ideal;
-    CoordTopocentric obscured_azel; // only used for debug printing of
 
-    // double current_azimuth = 0;
-    // double current_elevation = 0;
+    bool pending_az = false;
+    bool pending_el = false;
+    bool pending_any = false;
 
-    bool sat_viewable_last_pass = false;
     bool sat_viewable = false;
-    double pass_start_Az = 0.0;
-    double pass_start_El = 0.0;
 
-    bool track_waiting_to_park = false;
-    int time_to_park = 0;
-    int time_to_ret = 0;
+    double cmd_az = 0;
+    double cmd_el = M_PI_2;
+
+    int sleep_timer = 0;
+    int sleep_timer_max = 0;
 
     for (;;)
     {
-        Eci pos_now = target->FindPosition(DateTime::Now(true));
+        // Step 1: Execute command
+        pending_any = pending_az | pending_el;
+
+        if (pending_az)
+            aim_azimuth(global->connection, cmd_az); // 160 ms
+        else
+            usleep(160000);
+
+        pending_az = false;
+        if (pending_el)
+            aim_elevation(global->connection, cmd_el); // 160 ms
+        else
+            usleep(160000);
+
+        pending_el = false;
+        usleep(100000);
+        if (pending_any) // any change, send over network
+        {
+            global->AzEl[0] = cmd_az;
+            global->AzEl[1] = cmd_el;
+            NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
+            network_frame->sendFrame(global->network_data);
+            delete network_frame;
+        }
+        // Now we have 680000 us left
+        usleep(580000);
+        // Determine position of satellite NOW
+        DateTime tnow = DateTime::Now(true);
+        Eci pos_now = target->FindPosition(tnow);
         CoordTopocentric current_pos = dish->GetLookAngle(pos_now);
         CoordGeodetic current_lla = pos_now.ToGeodetic();
-        dbprintlf(BLUE_BG "Current Pointing: %.2f AZ, %.2f EL", current_pos.azimuth DEG, current_pos.elevation DEG);
-        dbprintlf(BLUE_BG "Current Position: %.2f LA, %.2f LN", current_lla.latitude DEG, current_lla.longitude DEG);
-        // Establish if the target is visible.
-        if (current_pos.elevation DEG > MIN_ELEV)
-        { // The target is visible.
-            sat_viewable = true;
-            // Find the angle to the target.
-            ideal = current_pos;
-            dbprintlf(GREEN_FG "IDEAL AT   AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
-        }
-        else if (!track_waiting_to_park)
-        { // The target is not visible.
-            sat_viewable = false;
-            // Find the angle to the next targetrise.
-            dbprintlf(BLUE_FG "TARGET NOT VISIBLE");
-            // ideal = current_pos;
-            // ideal = find_next_targetrise(target, dish);
-            // dbprintlf(YELLOW_FG "WAITING AT AZ:EL %.2f:%.2f", ideal.azimuth DEG, ideal.elevation DEG);
-            obscured_azel = current_pos;
-            // ideal.azimuth = 1.5708; // 90deg, this is in radians
-            // Change elevation to 90' when parked.
-            ideal.elevation = M_PI / 2; // 90deg, this is in radians.
-            /// D O   N O T   C H A N G E   A Z   W H E N   P A R K E D
-            dbprintlf(YELLOW_FG "PARKING AT AZ:EL %.2f:%.2f (%.2f:%.2f)", ideal.azimuth DEG, ideal.elevation DEG, obscured_azel.azimuth DEG, obscured_azel.elevation DEG);
-            // sat waiting to park now
-            track_waiting_to_park = true;
-#define TRACKER_RETURN_ZERO_TIME 120
-            time_to_park = TRACKER_RETURN_ZERO_TIME; // 2 minutes
-            time_to_ret = TRACKER_RETURN_ZERO_TIME;
+        dbprintlf(BLUE_BG "Current Position: %.2f AZ, %.2f EL | %.2f LA, %.2f LN", current_pos.azimuth DEG, current_pos.elevation DEG, current_lla.latitude DEG, current_lla.longitude DEG);
+        if (sleep_timer)
+        {
+            if (sleep_timer > sleep_timer_max) // update max
+                sleep_timer_max = sleep_timer;
+            if ((sleep_timer_max - sleep_timer) < 20) // for 20 seconds command parking
+            {
+                pending_az = true;
+                pending_el = true;
+            }
+            sleep_timer--;
+            dbprintlf(BLUE_FG "Will be sleeping for %d more seconds...", sleep_timer);
+            continue;
         }
         else
         {
-            if (time_to_park-- > 0)
-                ;
-            else
+            sleep_timer_max = 0;
+        }
+        // Step 2: Are we in a pass?
+        if (current_pos.elevation DEG > MIN_ELEV)
+        {
+            if (!sat_viewable) // satellite just became visible
             {
-                if (time_to_ret-- > 0)
-                    ;
+                gpioSetMode(15, GPIO_OUT);
+                gpioWrite(15, GPIO_LOW);
             }
-            if (time_to_park == 0 && time_to_ret == TRACKER_RETURN_ZERO_TIME - 1)
+            sat_viewable = true;
+            if (fabs(cmd_az DEG - current_pos.azimuth DEG) > 1) // azimuth has changed
             {
-                ideal.azimuth = 0;
+                cmd_az = current_pos.azimuth DEG;
+                pending_az = true;
             }
-            if (time_to_park == 0 && time_to_ret == 0) // both timers are up
+            if (fabs(cmd_el DEG - current_pos.elevation DEG) > 1)
             {
-                track_waiting_to_park = false;
-                time_to_park = 0;
-                time_to_ret = 0;
+                cmd_el = current_pos.elevation DEG;
+                pending_el = true;
+            }
+            continue;
+        }
+        // Step 3: Were we in a pass?
+        if (sat_viewable) // we are here, but sat_viewable is on. Meaning we just got out of a pass
+        {
+            sat_viewable = false;
+            cmd_az = -AZIM_ADJ;
+            cmd_el = 90;
+            pending_az = true;
+            pending_el = true;
+            sleep_timer = 120; // 120 seconds
+            gpioSetMode(15, GPIO_IN); // set packet output to high Z
+            gpioSetMode(18, GPIO_IN); // set PA VDD to high Z
+        }
+        sat_viewable = false;
+        // Step 4: Projection
+        DateTime tnext = tnow;
+#define LOOKAHEAD_MIN 2
+#define LOOKAHEAD_MAX 4
+        tnext = tnext.AddMinutes(LOOKAHEAD_MAX); // 4 minutes lookahead
+        for (int i = 0; i < (LOOKAHEAD_MAX - LOOKAHEAD_MIN) * 60; i++)
+        {
+            Eci eci_ahd = target->FindPosition(tnext);
+            CoordTopocentric pos_ahd = dish->GetLookAngle(eci_ahd);
+            if (i == 0)
+                dbprintlf(GREEN_BG "Lookahead %d: %.2f AZ %.2f EL", i, pos_ahd.azimuth DEG, pos_ahd.elevation DEG);
+            int ahd_el = pos_ahd.elevation DEG;
+            if (ahd_el < (int)MIN_ELEV) // still not in view 4 minutes ahead, don't care
+            {
+                break;
+            }
+            if (ahd_el > (int)MIN_ELEV) // already up, find where it is at proper elevation
+            {
+                tnext = tnext.AddSeconds(-1);
+            }
+            else // right point
+            {
+                cmd_az = pos_ahd.azimuth DEG;
+                cmd_el = pos_ahd.elevation DEG;
+                pending_az = true;
+                pending_el = true;
+                sleep_timer = LOOKAHEAD_MAX * 60 - i; // lookahead left
+                gpioSetMode(18, GPIO_OUT);            // set PA VDD EN to output
+                gpioWrite(18, GPIO_HIGH);             // enable PA VDD
+                break;                                // break inner for loop
             }
         }
-
-        // NOTE: Assume the current azimuth and elevation is whatever we last told it to be at.
-
-        // Find the difference between ideal and actual angles. If we are off from ideal by >1 degree, aim at the ideal.
-        if (ideal.azimuth DEG - global->AzEl[0] < -1 || ideal.azimuth DEG - global->AzEl[0] > 1)
-        {
-            aim_azimuth(global->connection, ideal.azimuth DEG);
-            global->AzEl[0] = ideal.azimuth DEG;
-
-            // Send our updated coordinates.
-            NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
-            network_frame->sendFrame(global->network_data);
-            delete network_frame;
-        }
-
-        if (ideal.elevation DEG - global->AzEl[1] < -1 || ideal.elevation DEG - global->AzEl[1] > 1)
-        {
-            aim_elevation(global->connection, ideal.elevation DEG);
-            global->AzEl[1] = ideal.elevation DEG;
-
-            // Send our updated coordinates.
-            NetFrame *network_frame = new NetFrame((unsigned char *)global->AzEl, sizeof(global->AzEl), NetType::TRACKING_DATA, NetVertex::CLIENT);
-            network_frame->sendFrame(global->network_data);
-            delete network_frame;
-        }
-
-        if (sat_viewable && !sat_viewable_last_pass)
-        {
-            dbprintlf(BLUE_FG "LOGGING STARTING AZEL OF THIS PASS");
-            sat_viewable_last_pass = true;
-            pass_start_Az = global->AzEl[0];
-            pass_start_El = global->AzEl[1];
-        }
-        else if (!sat_viewable && sat_viewable_last_pass)
-        {
-            dbprintlf(BLUE_FG "RETRACING TO STARTING AZEL OF THIS PASS");
-            sat_viewable_last_pass = false;
-            aim_azimuth(global->connection, pass_start_Az);
-            aim_elevation(global->connection, pass_start_El);
-        }
-
-        dbprintlf(BLUE_FG "CURRENT AZEL: %.1f:%.1f", global->AzEl[0], global->AzEl[1]);
-
-        usleep(1 SEC);
     }
 
     delete dish;

@@ -40,7 +40,9 @@ int main(int argc, char *argv[])
     {
         strcpy(global->devname, argv[1]);
     }
-
+    global->resetAtInit = false;
+    if (argc > 1)
+        global->resetAtInit = true;
     pthread_t net_polling_tid, net_rx_tid, tracking_tid, track_status_tid;
 
     while (global->network_data->thread_status > -1)
